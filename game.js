@@ -63,6 +63,39 @@ const doubleJumpDuration = 20; // 20 seconds
 // Particles for death effect
 const particles = [];
 
+// Leaderboard (top 10 from server)
+let leaderboard = [];
+// Use same host as the game, but port 3001
+const SERVER_URL = `http://${window.location.hostname}:3001`;
+
+// Fetch leaderboard from server
+async function fetchLeaderboard() {
+    try {
+        const response = await fetch(`${SERVER_URL}/api/scores`);
+        if (response.ok) {
+            leaderboard = await response.json();
+        }
+    } catch (e) {
+        console.log('Could not fetch leaderboard:', e);
+    }
+}
+
+// Submit score to server
+async function submitScore(name, score) {
+    try {
+        const response = await fetch(`${SERVER_URL}/api/scores`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, score })
+        });
+        if (response.ok) {
+            leaderboard = await response.json();
+        }
+    } catch (e) {
+        console.log('Could not submit score:', e);
+    }
+}
+
 // Player colors
 const playerColors = [
     { name: '빨강', hex: '#ff0000' },
@@ -78,6 +111,20 @@ const playerColors = [
     { name: '흰색', hex: '#ffffff' }
 ];
 
+// Get server best score (top 1)
+function getServerBestScore() {
+    if (leaderboard.length > 0) {
+        return { score: leaderboard[0].score, name: leaderboard[0].name };
+    }
+    return { score: 0, name: '---' };
+}
+
+// Check if score beats server best
+function beatsServerBest(score) {
+    const best = getServerBestScore();
+    return score > best.score;
+}
+
 // Game State
 const gameState = {
     isRunning: false,
@@ -88,11 +135,21 @@ const gameState = {
     selectedColorIndex: 0,
     lastTime: 0,
     score: 0,
-    highScore: parseInt(localStorage.getItem('highScore')) || 0,
-    highScoreName: localStorage.getItem('highScoreName') || 'AAA',
     newName: '',
-    isHardMode: false
+    isHardMode: false,
+    isHellMode: false,
+    isGodMode: false
 };
+
+// Hell mode timer
+let hellModeTimer = 0;
+const hellModeInterval = 5; // 5 seconds
+
+// God mode timer
+let godModeTimer = 0;
+const godModeInterval = 10; // 10 seconds
+let godModeMonsterTimer = 0;
+const godModeMonsterInterval = 20; // 20 seconds
 
 // Canvas Setup
 const canvas = document.getElementById('game-canvas');
@@ -111,8 +168,11 @@ function spawnSpikes() {
     let count;
 
     if (isDoubleJumpMode) {
-        // 5-6 spikes in double jump mode
-        count = Math.floor(Math.random() * 2) + 5;
+        // 6-8 spikes in double jump mode
+        count = Math.floor(Math.random() * 3) + 6;
+    } else if (gameState.isHardMode) {
+        // 2-4.5 spikes in hard mode (2, 3, 4, or 5)
+        count = Math.floor(Math.random() * 4) + 2;
     } else {
         // 1-4 spikes in normal mode
         count = Math.floor(Math.random() * 4) + 1;
@@ -164,12 +224,21 @@ function spawnGear() {
 // Spawn monster at the right edge of the screen
 function spawnMonster() {
     const monsterSize = 55;
+    // Set monster speed based on mode
+    let monsterSpeed = 300;
+    if (gameState.isGodMode) {
+        monsterSpeed = 600;
+    } else if (gameState.isHellMode) {
+        monsterSpeed = 500;
+    } else if (gameState.isHardMode) {
+        monsterSpeed = 400;
+    }
     const monster = {
         worldX: camera.x + config.width,
         y: groundY - monsterSize,
         width: monsterSize,
         height: monsterSize,
-        speed: 300,
+        speed: monsterSpeed,
         color: '#8b0000',
         mouthOpen: 0,
         mouthDirection: 1
@@ -550,15 +619,38 @@ function renderColorSelect() {
     ctx.fillStyle = selectTextColor;
     ctx.font = '24px Arial';
     ctx.textAlign = 'center';
-    ctx.fillText('미리보기', config.width / 2, 420);
+    ctx.fillText('미리보기', config.width / 2 - 150, 420);
 
     // Draw preview ground
     ctx.fillStyle = '#3d3d5c';
-    ctx.fillRect(config.width / 2 - 100, 500, 200, 50);
+    ctx.fillRect(config.width / 2 - 250, 500, 200, 50);
 
     // Draw preview player
     ctx.fillStyle = playerColors[gameState.selectedColorIndex].hex;
-    ctx.fillRect(config.width / 2 - 20, 460, 40, 40);
+    ctx.fillRect(config.width / 2 - 170, 460, 40, 40);
+
+    // Draw leaderboard on the right side
+    if (leaderboard.length > 0) {
+        const leaderboardX = config.width - 150;
+        const leaderboardY = 180;
+
+        ctx.fillStyle = selectTextColor;
+        ctx.font = 'bold 20px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('TOP 10', leaderboardX, leaderboardY);
+
+        ctx.font = '14px Arial';
+        ctx.textAlign = 'left';
+        for (let i = 0; i < leaderboard.length; i++) {
+            const entry = leaderboard[i];
+            const y = leaderboardY + 25 + i * 22;
+            ctx.fillStyle = selectTextColor;
+            ctx.fillText(`${i + 1}. ${entry.name}`, leaderboardX - 60, y);
+            ctx.textAlign = 'right';
+            ctx.fillText(`${entry.score}`, leaderboardX + 60, y);
+            ctx.textAlign = 'left';
+        }
+    }
 }
 
 // Color selection loop
@@ -586,6 +678,11 @@ function init() {
     gameState.lastTime = performance.now();
     gameState.score = 0;
     gameState.isHardMode = false;
+    gameState.isHellMode = false;
+    gameState.isGodMode = false;
+    hellModeTimer = 0;
+    godModeTimer = 0;
+    godModeMonsterTimer = 0;
     player.speed = 300; // Reset speed
 
     // Reset double jump mode
@@ -676,13 +773,14 @@ function renderGameOver() {
     ctx.fillStyle = '#3d3d5c';
     ctx.fillRect(0, groundY, config.width, config.groundHeight);
 
-    // Draw score and high score
+    // Draw score and high score (from server)
     const scoreTextColor = config.backgroundColor === '#ffffb3' ? '#000000' : '#ffffff';
+    const serverBest = getServerBestScore();
     ctx.fillStyle = scoreTextColor;
     ctx.font = '24px Arial';
     ctx.textAlign = 'left';
     ctx.fillText('Score: ' + gameState.score, 20, 40);
-    ctx.fillText('Best: ' + gameState.highScore + ' (' + gameState.highScoreName + ')', 20, 70);
+    ctx.fillText('Best: ' + serverBest.score + ' (' + serverBest.name + ')', 20, 70);
 
     // Draw spikes
     for (const spike of spikes) {
@@ -820,6 +918,29 @@ function renderGameOver() {
         ctx.font = '24px Arial';
         ctx.fillText('Press R to restart', config.width / 2, config.height / 2 + 10);
     }
+
+    // Draw leaderboard on the right side
+    if (leaderboard.length > 0) {
+        const leaderboardX = config.width - 180;
+        const leaderboardY = 100;
+
+        ctx.fillStyle = textColor;
+        ctx.font = 'bold 20px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('TOP 10', leaderboardX, leaderboardY);
+
+        ctx.font = '16px Arial';
+        ctx.textAlign = 'left';
+        for (let i = 0; i < leaderboard.length; i++) {
+            const entry = leaderboard[i];
+            const y = leaderboardY + 30 + i * 25;
+            ctx.fillStyle = textColor;
+            ctx.fillText(`${i + 1}. ${entry.name}`, leaderboardX - 60, y);
+            ctx.textAlign = 'right';
+            ctx.fillText(`${entry.score}`, leaderboardX + 60, y);
+            ctx.textAlign = 'left';
+        }
+    }
 }
 
 // Update Game Logic
@@ -891,7 +1012,8 @@ function update(deltaTime) {
             gameState.isGameOver = true;
             gameState.isRunning = false;
             // Check if new high score
-            if (gameState.score > gameState.highScore) {
+            // Check if beats server best score
+            if (beatsServerBest(gameState.score)) {
                 gameState.isEnteringName = true;
                 gameState.newName = '';
                 showNameInput();
@@ -924,7 +1046,8 @@ function update(deltaTime) {
             gameState.isGameOver = true;
             gameState.isRunning = false;
             // Check if new high score
-            if (gameState.score > gameState.highScore) {
+            // Check if beats server best score
+            if (beatsServerBest(gameState.score)) {
                 gameState.isEnteringName = true;
                 gameState.newName = '';
                 showNameInput();
@@ -973,7 +1096,8 @@ function update(deltaTime) {
             gameState.isGameOver = true;
             gameState.isRunning = false;
             // Check if new high score
-            if (gameState.score > gameState.highScore) {
+            // Check if beats server best score
+            if (beatsServerBest(gameState.score)) {
                 gameState.isEnteringName = true;
                 gameState.newName = '';
                 showNameInput();
@@ -985,8 +1109,24 @@ function update(deltaTime) {
 
     // Check gear collision with spikes - remove gear if touching spike
     for (let i = gears.length - 1; i >= 0; i--) {
+        let gearRemoved = false;
         for (const spike of spikes) {
             if (checkSpikeGearCollision(spike, gears[i])) {
+                gears.splice(i, 1);
+                gearRemoved = true;
+                break;
+            }
+        }
+        if (gearRemoved) continue;
+
+        // Check gear collision with monsters - remove gear if touching monster
+        for (const monster of monsters) {
+            const gearScreenX = gears[i].worldX - camera.x;
+            const monsterScreenX = monster.worldX - camera.x;
+            const distX = gearScreenX - (monsterScreenX + monster.width / 2);
+            const distY = gears[i].y - (monster.y + monster.height / 2);
+            const distance = Math.sqrt(distX * distX + distY * distY);
+            if (distance < gears[i].radius + monster.width / 2) {
                 gears.splice(i, 1);
                 break;
             }
@@ -1002,8 +1142,8 @@ function update(deltaTime) {
         }
     }
 
-    // Check if all spikes are off screen to the left and player landed
-    if (spikes.length > 0 && player.isOnGround) {
+    // Check if all spikes are off screen to the left
+    if (spikes.length > 0) {
         const allSpikesOffScreen = spikes.every(spike => {
             const spikeScreenX = spike.worldX - camera.x;
             return spikeScreenX + spike.width < 0;
@@ -1012,18 +1152,15 @@ function update(deltaTime) {
         if (allSpikesOffScreen) {
             gameState.score += spikes.length;
             spikes.length = 0;
-            // Don't spawn spikes in hard mode
-            if (!gameState.isHardMode) {
-                spawnSpikes();
-            }
+            spawnSpikes();
         }
     }
 
     // Monster spawn timer (not in double jump mode)
     if (!isDoubleJumpMode) {
         monsterSpawnTimer += deltaTime;
-        // Hard mode: spawn every 5 seconds, normal: every 11 seconds
-        const currentMonsterInterval = gameState.isHardMode ? 5 : monsterSpawnInterval;
+        // Hard mode: spawn every 3 seconds, normal: every 11 seconds
+        const currentMonsterInterval = gameState.isHardMode ? 3 : monsterSpawnInterval;
         if (monsterSpawnTimer >= currentMonsterInterval) {
             spawnMonster();
             monsterSpawnTimer = 0;
@@ -1052,7 +1189,8 @@ function update(deltaTime) {
             gameState.isGameOver = true;
             gameState.isRunning = false;
             // Check if new high score
-            if (gameState.score > gameState.highScore) {
+            // Check if beats server best score
+            if (beatsServerBest(gameState.score)) {
                 gameState.isEnteringName = true;
                 gameState.newName = '';
                 showNameInput();
@@ -1067,7 +1205,7 @@ function update(deltaTime) {
         const monsterScreenX = monsters[i].worldX - camera.x;
         if (monsterScreenX + monsters[i].width < 0) {
             monsters.splice(i, 1);
-            gameState.score += 1;
+            gameState.score += 3;
         }
     }
 
@@ -1082,7 +1220,88 @@ function update(deltaTime) {
     // Hard mode activation at 100 points
     if (gameState.score >= 100 && !gameState.isHardMode) {
         gameState.isHardMode = true;
-        player.speed = 300 * 1.5; // 1.5x speed
+        player.speed = 300 * 1.2; // 1.2x speed
+    }
+
+    // Hell mode activation at 150 points
+    if (gameState.score >= 150 && !gameState.isHellMode) {
+        gameState.isHellMode = true;
+        // Keep speed at 1x (300)
+    }
+
+    // God mode activation at 200 points
+    if (gameState.score >= 200 && !gameState.isGodMode) {
+        gameState.isGodMode = true;
+        player.speed = 300 * 1.7; // 1.7x speed
+    }
+
+    // Hell mode: spawn 3 spikes + block + monster every 5 seconds (only when not in god mode)
+    if (gameState.isHellMode && !gameState.isGodMode && !isDoubleJumpMode) {
+        hellModeTimer += deltaTime;
+        if (hellModeTimer >= hellModeInterval) {
+            // Spawn 3 spikes
+            const spikeWidth = 40;
+            const spikeHeight = 40;
+            let currentX = camera.x + config.width;
+            for (let i = 0; i < 3; i++) {
+                spikes.push({
+                    worldX: currentX,
+                    y: groundY - spikeHeight,
+                    width: spikeWidth,
+                    height: spikeHeight,
+                    color: '#000000'
+                });
+                currentX += spikeWidth;
+            }
+            // Spawn block right after spikes
+            blocks.push({
+                worldX: currentX,
+                y: groundY - 80,
+                width: 40,
+                height: 80,
+                color: '#8b5cf6'
+            });
+            // Spawn monster
+            spawnMonster();
+            hellModeTimer = 0;
+        }
+    }
+
+    // God mode: spawn 6 spikes + block every 10 seconds, monster every 20 seconds
+    if (gameState.isGodMode && !isDoubleJumpMode) {
+        godModeTimer += deltaTime;
+        godModeMonsterTimer += deltaTime;
+
+        if (godModeTimer >= godModeInterval) {
+            // Spawn 6 spikes
+            const spikeWidth = 40;
+            const spikeHeight = 40;
+            let currentX = camera.x + config.width;
+            for (let i = 0; i < 6; i++) {
+                spikes.push({
+                    worldX: currentX,
+                    y: groundY - spikeHeight,
+                    width: spikeWidth,
+                    height: spikeHeight,
+                    color: '#000000'
+                });
+                currentX += spikeWidth;
+            }
+            // Spawn block right after spikes
+            blocks.push({
+                worldX: currentX,
+                y: groundY - 80,
+                width: 40,
+                height: 80,
+                color: '#8b5cf6'
+            });
+            godModeTimer = 0;
+        }
+
+        if (godModeMonsterTimer >= godModeMonsterInterval) {
+            spawnMonster();
+            godModeMonsterTimer = 0;
+        }
     }
 
     // Double jump portal system
@@ -1116,7 +1335,7 @@ function update(deltaTime) {
                 createDeathParticles(playerDrawX, player.y);
                 gameState.isGameOver = true;
                 gameState.isRunning = false;
-                if (gameState.score > gameState.highScore) {
+                if (beatsServerBest(gameState.score)) {
                     gameState.isEnteringName = true;
                     gameState.newName = '';
                     showNameInput();
@@ -1124,10 +1343,17 @@ function update(deltaTime) {
                 gameOverLoop();
                 return;
             }
+            // Double jump portal missed - just remove it, game continues
             portal = null;
+        } else {
+            // Rotate portal for visual effect
+            portal.rotation += deltaTime * 2;
         }
-        // Rotate portal for visual effect
-        portal.rotation += deltaTime * 2;
+    }
+
+    // Ensure spikes exist (fix for stuck game)
+    if (spikes.length === 0) {
+        spawnSpikes();
     }
 
     // Double jump mode timer - spawn normal portal after 20 seconds
@@ -1154,9 +1380,9 @@ function update(deltaTime) {
         }
     }
 
-    // 10% chance to spawn double jump portal (only when not in double jump mode and no portal exists)
-    if (!isDoubleJumpMode && !portal && Math.random() < 0.001) {
-        // 0.1% per frame gives roughly 10% chance over several seconds
+    // 5% chance to spawn double jump portal (only in normal mode - not hard/hell/god mode)
+    if (!isDoubleJumpMode && !portal && !gameState.isHardMode && !gameState.isHellMode && !gameState.isGodMode && Math.random() < 0.0005) {
+        // 0.05% per frame gives roughly 5% chance over several seconds
         spawnPortal('doubleJump');
     }
 }
@@ -1171,27 +1397,18 @@ function render() {
     ctx.fillStyle = '#3d3d5c';
     ctx.fillRect(0, groundY, config.width, config.groundHeight);
 
-    // Draw score and high score
+    // Draw score and high score (from server)
     const scoreTextColor = config.backgroundColor === '#ffffb3' ? '#000000' : '#ffffff';
+    const serverBest = getServerBestScore();
     ctx.fillStyle = scoreTextColor;
     ctx.font = '24px Arial';
     ctx.textAlign = 'left';
     ctx.fillText('Score: ' + gameState.score, 20, 40);
-    ctx.fillText('Best: ' + gameState.highScore + ' (' + gameState.highScoreName + ')', 20, 70);
+    ctx.fillText('Best: ' + serverBest.score + ' (' + serverBest.name + ')', 20, 70);
 
     // Draw spikes (convert world position to screen position)
     for (const spike of spikes) {
         const screenX = spike.worldX - camera.x;
-
-        // Draw hitbox (triangle) - red for deadly
-        ctx.strokeStyle = '#ff0000';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(screenX + spike.width / 2, spike.y);
-        ctx.lineTo(screenX + spike.width, spike.y + spike.height);
-        ctx.lineTo(screenX, spike.y + spike.height);
-        ctx.closePath();
-        ctx.stroke();
 
         // Draw spike
         ctx.fillStyle = spike.color;
@@ -1208,35 +1425,12 @@ function render() {
         const screenX = block.worldX - camera.x;
         ctx.fillStyle = block.color;
         ctx.fillRect(screenX, block.y, block.width, block.height);
-
-        // Draw side hitbox (red for deadly sides)
-        ctx.strokeStyle = '#ff0000';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(screenX, block.y);
-        ctx.lineTo(screenX, block.y + block.height);
-        ctx.stroke();
-
-        // Draw top hitbox (blue for safe landing)
-        ctx.strokeStyle = '#0088ff';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(screenX, block.y);
-        ctx.lineTo(screenX + block.width, block.y);
-        ctx.stroke();
     }
 
     // Draw gears (sawblades)
     for (const gear of gears) {
         const screenX = gear.worldX - camera.x;
         drawGear(screenX, gear.y, gear.radius, gear.teeth, gear.rotation, gear.color);
-
-        // Draw hitbox - red for deadly
-        ctx.strokeStyle = '#ff0000';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.arc(screenX, gear.y, gear.radius, 0, Math.PI * 2);
-        ctx.stroke();
     }
 
     // Draw monsters (side view - pentagon shape, upper jaw moves)
@@ -1297,11 +1491,6 @@ function render() {
         ctx.beginPath();
         ctx.arc(screenX + monster.width - 12, monster.y + 12 - upperJawMove, 7, 0, Math.PI * 2);
         ctx.fill();
-
-        // Draw hitbox - red for deadly
-        ctx.strokeStyle = '#ff0000';
-        ctx.lineWidth = 2;
-        ctx.strokeRect(screenX, monster.y, monster.width, monster.height);
     }
 
     // Draw portal
@@ -1371,13 +1560,11 @@ nameInput.addEventListener('input', () => {
     gameState.newName = nameInput.value;
 });
 
-nameInput.addEventListener('keydown', (e) => {
+nameInput.addEventListener('keydown', async (e) => {
     if (e.key === 'Enter' && gameState.newName.length > 0) {
-        // Save high score with name
-        gameState.highScore = gameState.score;
-        gameState.highScoreName = gameState.newName;
-        localStorage.setItem('highScore', gameState.highScore);
-        localStorage.setItem('highScoreName', gameState.highScoreName);
+        // Submit score to server
+        await submitScore(gameState.newName, gameState.score);
+
         gameState.isEnteringName = false;
         nameInput.style.display = 'none';
         nameInput.value = '';
@@ -1427,8 +1614,8 @@ window.addEventListener('keydown', (e) => {
     if (e.code === 'Space') {
         e.preventDefault();
     }
-    // Restart game - go back to color selection
-    if (e.code === 'KeyR' && gameState.isGameOver && !gameState.isEnteringName) {
+    // Restart game - go back to color selection (R or Space)
+    if ((e.code === 'KeyR' || e.code === 'Space') && gameState.isGameOver && !gameState.isEnteringName) {
         player.worldX = 100;
         gameState.isGameOver = false;
         gameState.isSelectingColor = true;
@@ -1504,10 +1691,13 @@ canvas.addEventListener('touchend', (e) => {
 }, { passive: false });
 
 // Start the game when the page loads
-window.addEventListener('load', () => {
+window.addEventListener('load', async () => {
     // Make canvas focusable and focus it for keyboard input
     canvas.tabIndex = 1;
     canvas.focus();
+
+    // Fetch leaderboard from server
+    await fetchLeaderboard();
 
     if (gameState.isSelectingColor) {
         colorSelectLoop();

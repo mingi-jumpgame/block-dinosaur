@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+
+# Data
+data/
+
+# Capacitor
+android/
+ios/
+www/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Logs
+*.log
+npm-debug.log*
+
+# Build
+dist/
+build/
