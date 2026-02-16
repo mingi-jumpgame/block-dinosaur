@@ -53,12 +53,12 @@ const backgroundColors = ['#ffb6c1', '#ffffb3', '#b3ffb3', '#87ceeb']; // pink, 
 let backgroundTimer = 0;
 const backgroundChangeInterval = 10; // 10 seconds
 
-// Cloud text (전민기가 만듬)
+// Cloud text (나야,전민기)
 const cloudText = {
     x: 300, // Start from middle of screen
     y: 120,
     speed: 40, // pixels per second
-    text: '전민기가 만듬'
+    text: '나야,전민기'
 };
 
 // Double jump portal system
