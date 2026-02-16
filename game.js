@@ -53,6 +53,14 @@ const backgroundColors = ['#ffb6c1', '#ffffb3', '#b3ffb3', '#87ceeb']; // pink, 
 let backgroundTimer = 0;
 const backgroundChangeInterval = 10; // 10 seconds
 
+// Cloud text (전민기가 만듬)
+const cloudText = {
+    x: 300, // Start from middle of screen
+    y: 120,
+    speed: 40, // pixels per second
+    text: '전민기가 만듬'
+};
+
 // Double jump portal system
 let portal = null;
 let isDoubleJumpMode = false;
@@ -172,10 +180,15 @@ function getServerBestScore() {
     return { score: 0, name: '---' };
 }
 
-// Check if score beats server best
+// Check if score is in top 10
 function beatsServerBest(score) {
-    const best = getServerBestScore();
-    return score > best.score;
+    // If leaderboard has less than 10 entries, any score qualifies
+    if (leaderboard.length < 10) {
+        return true;
+    }
+    // Check if score is higher than the lowest score in top 10
+    const lowestScore = leaderboard[leaderboard.length - 1].score;
+    return score > lowestScore;
 }
 
 // Game State
@@ -297,6 +310,42 @@ function spawnMonster() {
         mouthDirection: 1
     };
     monsters.push(monster);
+}
+
+// Draw cloud text
+function drawCloudText(x, y, text) {
+    ctx.save();
+
+    // Draw cloud shape behind text
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+
+    // Measure text width for cloud size
+    ctx.font = 'bold 24px Arial';
+    const textWidth = ctx.measureText(text).width;
+    const cloudWidth = textWidth + 60;
+    const cloudHeight = 60;
+
+    // Draw fluffy cloud using circles
+    const centerX = x + cloudWidth / 2;
+    const centerY = y + cloudHeight / 2;
+
+    // Main cloud body - bigger circles
+    ctx.beginPath();
+    ctx.arc(centerX - 40, centerY, 30, 0, Math.PI * 2);
+    ctx.arc(centerX, centerY - 12, 35, 0, Math.PI * 2);
+    ctx.arc(centerX + 40, centerY, 30, 0, Math.PI * 2);
+    ctx.arc(centerX - 20, centerY + 12, 28, 0, Math.PI * 2);
+    ctx.arc(centerX + 20, centerY + 12, 28, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Draw text on cloud
+    ctx.fillStyle = '#333333';
+    ctx.font = 'bold 22px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, centerX, centerY);
+
+    ctx.restore();
 }
 
 // Spawn portal at the right edge of the screen
@@ -618,6 +667,9 @@ function renderColorSelect() {
     ctx.fillStyle = config.backgroundColor;
     ctx.fillRect(0, 0, config.width, config.height);
 
+    // Draw cloud text
+    drawCloudText(cloudText.x, cloudText.y, cloudText.text);
+
     // Determine text color based on background
     const selectTextColor = config.backgroundColor === '#ffffb3' ? '#000000' : '#ffffff';
     const selectHighlightColor = config.backgroundColor === '#ffffb3' ? '#000000' : '#ffffff';
@@ -707,8 +759,20 @@ function renderColorSelect() {
 }
 
 // Color selection loop
-function colorSelectLoop() {
+let colorSelectLastTime = performance.now();
+function colorSelectLoop(currentTime) {
     if (!gameState.isSelectingColor) return;
+
+    if (!currentTime) currentTime = performance.now();
+    const deltaTime = (currentTime - colorSelectLastTime) / 1000;
+    colorSelectLastTime = currentTime;
+
+    // Update cloud position
+    cloudText.x -= cloudText.speed * deltaTime;
+    if (cloudText.x < -200) {
+        cloudText.x = config.width + 50;
+    }
+
     renderColorSelect();
     requestAnimationFrame(colorSelectLoop);
 }
@@ -821,6 +885,9 @@ function renderGameOver() {
     // Clear canvas
     ctx.fillStyle = config.backgroundColor;
     ctx.fillRect(0, 0, config.width, config.height);
+
+    // Draw cloud text
+    drawCloudText(cloudText.x, cloudText.y, cloudText.text);
 
     // Draw ground
     ctx.fillStyle = '#3d3d5c';
@@ -1270,6 +1337,13 @@ function update(deltaTime) {
         backgroundTimer = 0;
     }
 
+    // Update cloud text position (move left)
+    cloudText.x -= cloudText.speed * deltaTime;
+    // Reset cloud position when it goes off screen to the left
+    if (cloudText.x < -200) {
+        cloudText.x = config.width + 50;
+    }
+
     // Hard mode activation at 100 points
     if (gameState.score >= 100 && !gameState.isHardMode) {
         gameState.isHardMode = true;
@@ -1446,6 +1520,9 @@ function render() {
     ctx.fillStyle = config.backgroundColor;
     ctx.fillRect(0, 0, config.width, config.height);
 
+    // Draw cloud text "전민기가 만듬"
+    drawCloudText(cloudText.x, cloudText.y, cloudText.text);
+
     // Draw ground
     ctx.fillStyle = '#3d3d5c';
     ctx.fillRect(0, groundY, config.width, config.groundHeight);
@@ -1458,6 +1535,12 @@ function render() {
     ctx.textAlign = 'left';
     ctx.fillText('Score: ' + gameState.score, 20, 40);
     ctx.fillText('Best: ' + serverBest.score + ' (' + serverBest.name + ')', 20, 70);
+
+    // Draw "나야,전민기" in top right corner
+    ctx.fillStyle = '#000000';
+    ctx.font = 'bold 18px Arial';
+    ctx.textAlign = 'right';
+    ctx.fillText('나야,전민기', config.width - 20, 30);
 
     // Draw spikes (convert world position to screen position)
     for (const spike of spikes) {
