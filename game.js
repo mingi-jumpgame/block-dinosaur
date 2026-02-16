@@ -82,7 +82,7 @@ const SUPABASE_KEY = 'sb_publishable_qEN5ryPr8tAglesmroaJNA_SQkMcg8c';
 async function fetchLeaderboard() {
     try {
         const response = await fetch(
-            `${SUPABASE_URL}/rest/v1/scores?select=name,score,date&order=score.desc&limit=10`,
+            `${SUPABASE_URL}/rest/v1/scores?select=name,score,date,color&order=score.desc&limit=10`,
             {
                 headers: {
                     'apikey': SUPABASE_KEY,
@@ -101,6 +101,8 @@ async function fetchLeaderboard() {
 // Submit score to Supabase
 async function submitScore(name, score) {
     try {
+        const playerColor = playerColors[gameState.selectedColorIndex].hex;
+
         // First check if name exists
         const checkResponse = await fetch(
             `${SUPABASE_URL}/rest/v1/scores?name=eq.${encodeURIComponent(name)}&select=id,score`,
@@ -128,7 +130,7 @@ async function submitScore(name, score) {
                                 'Content-Type': 'application/json',
                                 'Prefer': 'return=minimal'
                             },
-                            body: JSON.stringify({ score, date: new Date().toISOString() })
+                            body: JSON.stringify({ score, color: playerColor, date: new Date().toISOString() })
                         }
                     );
                 }
@@ -144,7 +146,7 @@ async function submitScore(name, score) {
                             'Content-Type': 'application/json',
                             'Prefer': 'return=minimal'
                         },
-                        body: JSON.stringify({ name, score, date: new Date().toISOString() })
+                        body: JSON.stringify({ name, score, color: playerColor, date: new Date().toISOString() })
                     }
                 );
             }
@@ -749,6 +751,16 @@ function renderColorSelect() {
         for (let i = 0; i < leaderboard.length; i++) {
             const entry = leaderboard[i];
             const y = leaderboardY + 25 + i * 22;
+
+            // Draw color box if color exists
+            if (entry.color) {
+                ctx.fillStyle = entry.color;
+                ctx.fillRect(leaderboardX - 75, y - 10, 12, 12);
+                ctx.strokeStyle = '#666666';
+                ctx.lineWidth = 1;
+                ctx.strokeRect(leaderboardX - 75, y - 10, 12, 12);
+            }
+
             ctx.fillStyle = selectTextColor;
             ctx.fillText(`${i + 1}. ${entry.name}`, leaderboardX - 60, y);
             ctx.textAlign = 'right';
