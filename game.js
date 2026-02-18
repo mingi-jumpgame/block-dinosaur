@@ -1094,10 +1094,22 @@ function renderGameOver() {
         ctx.fillText('Press R to restart', config.width / 2, config.height / 2 + 10);
     }
 
+    // Show selected player color preview (like color select screen)
+    const selectedColor = playerColors[gameState.selectedColorIndex].hex;
+    ctx.fillStyle = textColor;
+    ctx.font = '18px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('선택한 색상', config.width / 2, config.height / 2 + 55);
+    ctx.fillStyle = selectedColor;
+    ctx.fillRect(config.width / 2 - 20, config.height / 2 + 65, 40, 40);
+    ctx.strokeStyle = '#666666';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(config.width / 2 - 20, config.height / 2 + 65, 40, 40);
+
     // Draw leaderboard on the right side
     if (leaderboard.length > 0) {
-        const leaderboardX = config.width - 180;
-        const leaderboardY = 100;
+        const leaderboardX = config.width - 150;
+        const leaderboardY = 320;
 
         ctx.fillStyle = textColor;
         ctx.font = 'bold 20px Arial';
@@ -1109,8 +1121,18 @@ function renderGameOver() {
         for (let i = 0; i < leaderboard.length; i++) {
             const entry = leaderboard[i];
             const y = leaderboardY + 30 + i * 25;
+
+            // Draw color box if color exists
+            if (entry.color) {
+                ctx.fillStyle = entry.color;
+                ctx.fillRect(leaderboardX - 75, y - 10, 12, 12);
+                ctx.strokeStyle = '#666666';
+                ctx.lineWidth = 1;
+                ctx.strokeRect(leaderboardX - 75, y - 10, 12, 12);
+            }
+
             ctx.fillStyle = textColor;
-            ctx.fillText(`${i + 1}. ${entry.name}`, leaderboardX - 60, y);
+            ctx.fillText(`${i + 1}. ${entry.name}`, leaderboardX - 58, y);
             ctx.textAlign = 'right';
             ctx.fillText(`${entry.score}`, leaderboardX + 60, y);
             ctx.textAlign = 'left';
