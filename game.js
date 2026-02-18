@@ -350,6 +350,35 @@ function drawCloudText(x, y, text) {
     ctx.restore();
 }
 
+function getCloudBounds(x, y, text) {
+    ctx.save();
+    ctx.font = 'bold 24px Arial';
+    const textWidth = ctx.measureText(text).width;
+    ctx.restore();
+
+    return {
+        left: x,
+        top: y,
+        right: x + textWidth + 60,
+        bottom: y + 60
+    };
+}
+
+function isTouchOnCloud(x, y) {
+    const bounds = getCloudBounds(cloudText.x, cloudText.y, cloudText.text);
+    return x >= bounds.left && x <= bounds.right && y >= bounds.top && y <= bounds.bottom;
+}
+
+function togglePause() {
+    if (gameState.isGameOver || gameState.isSelectingColor || gameState.isEnteringName || !gameState.isRunning) {
+        return;
+    }
+    gameState.isPaused = !gameState.isPaused;
+    if (!gameState.isPaused) {
+        gameState.lastTime = performance.now();
+    }
+}
+
 // Spawn portal at the right edge of the screen
 function spawnPortal(type) {
     const portalWidth = 50;
@@ -1771,10 +1800,7 @@ window.addEventListener('keydown', (e) => {
     }
     // Pause game
     if (e.code === 'KeyP' && !gameState.isGameOver) {
-        gameState.isPaused = !gameState.isPaused;
-        if (!gameState.isPaused) {
-            gameState.lastTime = performance.now();
-        }
+        togglePause();
     }
 }, true);
 
@@ -1782,17 +1808,25 @@ window.addEventListener('keyup', (e) => {
     keys[e.code] = false;
 }, true);
 
+function getCanvasPoint(clientX, clientY) {
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    return {
+        x: (clientX - rect.left) * scaleX,
+        y: (clientY - rect.top) * scaleY
+    };
+}
+
 // Touch controls for mobile
 canvas.addEventListener('touchstart', (e) => {
     e.preventDefault();
 
     // Get touch position with scale correction for responsive canvas
     const touch = e.touches[0];
-    const rect = canvas.getBoundingClientRect();
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
-    const x = (touch.clientX - rect.left) * scaleX;
-    const y = (touch.clientY - rect.top) * scaleY;
+    const point = getCanvasPoint(touch.clientX, touch.clientY);
+    const x = point.x;
+    const y = point.y;
 
     // Color selection screen
     if (gameState.isSelectingColor) {
@@ -1829,9 +1863,23 @@ canvas.addEventListener('touchstart', (e) => {
         return;
     }
 
+    // Mobile pause/resume by tapping the moving cloud text
+    if (isTouchOnCloud(x, y)) {
+        togglePause();
+        return;
+    }
+
     // During game - jump
     keys['Space'] = true;
 }, { passive: false });
+
+// Desktop click: tap the moving cloud text to pause/resume
+canvas.addEventListener('mousedown', (e) => {
+    const point = getCanvasPoint(e.clientX, e.clientY);
+    if (isTouchOnCloud(point.x, point.y)) {
+        togglePause();
+    }
+});
 
 canvas.addEventListener('touchend', (e) => {
     e.preventDefault();
