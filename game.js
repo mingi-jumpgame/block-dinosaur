@@ -58,7 +58,7 @@ const cloudText = {
     x: 300, // Start from middle of screen
     y: 120,
     speed: 40, // pixels per second
-    text: '나야,전민기'
+    text: '점프가어렵니?'
 };
 
 // Double jump portal system
@@ -739,7 +739,7 @@ function renderColorSelect() {
     // Draw leaderboard on the right side
     if (leaderboard.length > 0) {
         const leaderboardX = config.width - 150;
-        const leaderboardY = 180;
+        const leaderboardY = 320;
 
         ctx.fillStyle = selectTextColor;
         ctx.font = 'bold 20px Arial';
