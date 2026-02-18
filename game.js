@@ -58,7 +58,7 @@ const cloudText = {
     x: 300, // Start from middle of screen
     y: 120,
     speed: 40, // pixels per second
-    text: '점프가어렵니?'
+    text: '일시정지'
 };
 
 // Double jump portal system
@@ -711,8 +711,14 @@ function renderColorSelect() {
     ctx.textAlign = 'center';
     ctx.fillText('색상 선택', config.width / 2, 80);
 
+    // Developer credit (top-left)
+    ctx.font = 'bold 18px Arial';
+    ctx.textAlign = 'left';
+    ctx.fillText('개발자 전민기', 20, 30);
+
     // Draw instructions
     ctx.font = '18px Arial';
+    ctx.textAlign = 'center';
     ctx.fillText('← → 로 선택, SPACE 또는 ENTER로 시작', config.width / 2, 120);
 
     // Draw color options in a grid
@@ -900,6 +906,14 @@ function renderPause() {
     ctx.fillText('PAUSED', config.width / 2, config.height / 2);
     ctx.font = '24px Arial';
     ctx.fillText('Press P to resume', config.width / 2, config.height / 2 + 40);
+
+    // Simple gameplay guide
+    ctx.font = '18px Arial';
+    ctx.fillText('점프로 장애물을 피하며 오래 버티는 횡스크롤 게임입니다.', config.width / 2, config.height / 2 + 85);
+    ctx.fillText('더블점프 포털을 먹으면 일정 시간 2단 점프가 가능합니다.', config.width / 2, config.height / 2 + 115);
+    ctx.fillText('상자 장애물 위에는 올라설 수 있습니다.', config.width / 2, config.height / 2 + 145);
+    ctx.fillText('PC: SPACE 점프 / P 일시정지 / 구름 클릭 일시정지', config.width / 2, config.height / 2 + 175);
+    ctx.fillText('모바일: 화면 터치 점프 / 구름 터치 일시정지', config.width / 2, config.height / 2 + 205);
 }
 
 // Game Over Loop (for particle animation)
@@ -1577,11 +1591,11 @@ function render() {
     ctx.fillText('Score: ' + gameState.score, 20, 40);
     ctx.fillText('Best: ' + serverBest.score + ' (' + serverBest.name + ')', 20, 70);
 
-    // Draw "나야,전민기" in top right corner
+    // Draw text in top right corner
     ctx.fillStyle = '#000000';
     ctx.font = 'bold 18px Arial';
     ctx.textAlign = 'right';
-    ctx.fillText('나야,전민기', config.width - 20, 30);
+    ctx.fillText('점프가 어렵니?', config.width - 20, 30);
 
     // Draw spikes (convert world position to screen position)
     for (const spike of spikes) {
